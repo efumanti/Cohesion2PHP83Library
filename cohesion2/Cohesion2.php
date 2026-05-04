@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 namespace andreaval\Cohesion2;
 
 if (!class_exists(__NAMESPACE__ . '\\Cohesion2Exception')) {
@@ -6,64 +8,53 @@ if (!class_exists(__NAMESPACE__ . '\\Cohesion2Exception')) {
 }
 
 /**
- * Classe per la gestione del SSO di Cohesion2
+ * Classe per la gestione del SSO di Cohesion2.
+ *
  * @version 3.0.1 30/03/2023 17.34
  * @requires PHP 5.4
  * @author Andrea Vallorani <andrea.vallorani@gmail.com>
  * @license MIT License <https://github.com/andreaval/Cohesion2PHPLibrary/blob/master/LICENSE>
  * @link http://cohesion.regione.marche.it/cohesioninformativo/
  */
-class Cohesion2{
-    
-    const COHESION2_CHECK = 'https://cohesion2.regione.marche.it/sso/Check.aspx?auth=';
-    const COHESION2_LOGIN = 'https://cohesion2.regione.marche.it/SA/AccediCohesion.aspx?auth=';
-    const COHESION2_WEB = 'https://cohesion2.regione.marche.it/SSO/webCheckSessionSSO.aspx';
-    const COHESION2_SAML20_CHECK = 'https://cohesion2.regione.marche.it/SPManager/WAYF.aspx?auth=';
-    const COHESION2_SAML20_WEB = 'https://cohesion2.regione.marche.it/SPManager/webCheckSessionSSO.aspx';
-    const EIDAS_FLAG = 'eidas=1';
-    const PURPOSE_FLAG = 'purpose=';
-    
-    private $session_name;
-    private $authRestriction = '0,1,2,3';
-    private $sso = true;
-    private $saml20 = false;
-    private $eIDAS = false;
-    private $SPIDProPurpose = false;
-    
+class Cohesion2
+{
+    public const COHESION2_CHECK        = 'https://cohesion2.regione.marche.it/sso/Check.aspx?auth=';
+    public const COHESION2_LOGIN        = 'https://cohesion2.regione.marche.it/SA/AccediCohesion.aspx?auth=';
+    public const COHESION2_WEB          = 'https://cohesion2.regione.marche.it/SSO/webCheckSessionSSO.aspx';
+    public const COHESION2_SAML20_CHECK = 'https://cohesion2.regione.marche.it/SPManager/WAYF.aspx?auth=';
+    public const COHESION2_SAML20_WEB   = 'https://cohesion2.regione.marche.it/SPManager/webCheckSessionSSO.aspx';
+    public const EIDAS_FLAG             = 'eidas=1';
+    public const PURPOSE_FLAG           = 'purpose=';
+
+    private readonly string $session_name;
+    private string $authRestriction = '0,1,2,3';
+    private bool $sso = true;
+    private bool $saml20 = false;
+    private bool $eIDAS = false;
+    private ?string $SPIDProPurpose = null;
+
+    /** ID sessione SSO */
+    public ?string $id_sso = null;
+
+    /** ID sessione ASPNET */
+    public ?string $id_aspnet = null;
+
+    /** Username utente autenticato in Cohesion */
+    public ?string $username = null;
+
+    /** Profilo dell'utente con i dati forniti dal server */
+    public ?array $profile = null;
+
     /**
-     * ID sessione SSO
-     * @var string
-     */
-    public $id_sso;
-    
-    /**
-     * ID sessione ASPNET
-     * @var string
-     */
-    public $id_aspnet;
-    
-    /**
-     * Username utente autenticato in Cohesion
-     * @var string
-     */
-    public $username;
-    
-    /**
-     * Profilo dell'utente contenente i dati forniti dal server
-     * @var array
-     */
-    public $profile;
-    
-    /**
-     * Costruttore
      * @param string $session_name Nome da assegnare alla variabile di sessione. Default: cohesion2
      */
-    function __construct($session_name='cohesion2'){
-        $this->session_name = (string)$session_name;
-        //controllo se la sessione è stata avviata
-        if(session_status() == PHP_SESSION_NONE) session_start();
-        if($this->isAuth()){
-            //Utente già autenticato, ripristino sessione
+    public function __construct(string $session_name = 'cohesion2')
+    {
+        $this->session_name = $session_name;
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        if ($this->isAuth()) {
             $obj = unserialize($_SESSION[$this->session_name]);
             $this->id_sso = $obj->id_sso;
             $this->id_aspnet = $obj->id_aspnet;
@@ -71,125 +62,120 @@ class Cohesion2{
             $this->profile = $obj->profile;
         }
     }
-    
+
     /**
-     * Imposta i metodi di autenticazione permessi
-     * @param string $authRestriction (separare le varie scelte con una virgola)
-     * Valore di default: 0,1,2,3
-     * 0 indica di mostrare l’autenticazione con Utente e Password
-     * 1 indica di mostrare l’autenticazione con Utente, Password e PIN
-     * 2 indica di mostrare l’autenticazione con Smart Card
-     * 3 indica di mostrare l’autenticazione di Dominio (valida solo per utenti 
-     * interni alla rete regionale)
-     * NON TUTTE LE COMBINAZIONI VENGONO ACCETTATE (es. 0,1 vengono comunque 
-     * mostrati tutti i metodi)
-     * @return Cohesion2
+     * Imposta i metodi di autenticazione permessi.
+     *
+     * Valore di default: '0,1,2,3' (separare le scelte con una virgola).
+     *   0 = Utente e Password
+     *   1 = Utente, Password e PIN
+     *   2 = Smart Card
+     *   3 = autenticazione di Dominio (utenti interni alla rete regionale)
+     *
+     * NON TUTTE LE COMBINAZIONI VENGONO ACCETTATE
+     * (es. '0,1' fa comunque mostrare tutti i metodi).
      */
-    public function setAuthRestriction($authRestriction){
-    	if($authRestriction) $this->authRestriction = $authRestriction;
+    public function setAuthRestriction(string $authRestriction): static
+    {
+        if ($authRestriction !== '') {
+            $this->authRestriction = $authRestriction;
+        }
         return $this;
     }
-    
-    /**
-     * Controlla se l'utente è già stato autenticato
-     * @return boolean
-     */
-    public function isAuth(){
-    	return isset($_SESSION[$this->session_name]);
+
+    /** Controlla se l'utente è già stato autenticato. */
+    public function isAuth(): bool
+    {
+        return isset($_SESSION[$this->session_name]);
     }
-    
+
     /**
-     * Attiva o meno l'uso del SingleSignOn. Se disabilitato, l'utente verrà
-     * sempre reindirizzato alla pagina di login senza controllare se esso 
-     * risulta autenticato o meno tramite SSO
-     * @param boolean $on
-     * @return Cohesion2
+     * Attiva o disattiva l'uso del Single Sign-On.
+     * Se disabilitato, l'utente viene sempre reindirizzato alla pagina di
+     * login senza controllare se è già autenticato tramite SSO.
      */
-    public function useSSO($on=TRUE){
+    public function useSSO(bool $on = true): static
+    {
         $this->sso = $on;
         return $this;
     }
-    
+
     /**
-     * Abilita o meno il funzionamento del SSO in modalità SAML2.0. Questa 
-     * modalità attiva, se non attivato, il SSO. 
-     * @param boolean $on
-     * @return Cohesion2
+     * Abilita o disabilita la modalità SAML 2.0.
+     * L'attivazione comporta automaticamente l'attivazione del SSO.
      */
-    public function useSAML20($on=TRUE){
+    public function useSAML20(bool $on = true): static
+    {
         $this->useSSO(true);
         $this->saml20 = $on;
         return $this;
     }
-    
-    /**
-     * Abilita il login eIDAS (e automaticamente la modalità SAML2.0)
-     * @return Cohesion2
-     */
-    public function enableEIDASLogin(){
+
+    /** Abilita il login eIDAS (e automaticamente la modalità SAML 2.0). */
+    public function enableEIDASLogin(): static
+    {
         $this->useSAML20(true);
         $this->eIDAS = true;
         return $this;
     }
-    
+
     /**
-     * Abilita il login con SPID Professionale (PF,PG,LP) e automaticamente la modalità SAML2.0)
-     * @param string[] $SPIDProPurposes inserire un array con i purpose richiesti. 
-     *                 Default: PF - SPID per Persone Fisiche ad Uso Professionale.
-     *                 I possibili valori sono: LP, PG, PF, PX Così come indicato 
-     *                 nell'avviso SPID 18 v2
+     * Abilita il login con SPID Professionale e automaticamente la modalità SAML 2.0.
+     *
+     * @param string[] $SPIDProPurposes Purpose richiesti.
+     *                 Default: ['PF'] (SPID per Persone Fisiche ad Uso Professionale).
+     *                 Valori possibili: LP, PG, PF, PX (avviso SPID 18 v2).
      * @link https://www.agid.gov.it/sites/default/files/repository_files/spid-avviso-n18_v.2-_autenticazione_persona_giuridica_o_uso_professionale_per_la_persona_giuridica.pdf
-     * @return Cohesion2
      */
-    public function enableSPIDProLogin($SPIDProPurposes=['PF']){
+    public function enableSPIDProLogin(array $SPIDProPurposes = ['PF']): static
+    {
         $this->useSAML20(true);
-        $this->SPIDProPurpose = implode('|',$SPIDProPurposes);
+        $this->SPIDProPurpose = implode('|', $SPIDProPurposes);
         return $this;
     }
-    
+
     /**
-     * Autentica l'utente nel sistema
-     * @return void
-     * @throws Cohesion2Exception Invocata eccezione in caso di errore
+     * Autentica l'utente nel sistema.
+     *
+     * @throws Cohesion2Exception in caso di errore
      */
-    public function auth(){
-        //file_put_contents('log.txt',__METHOD__."\n",FILE_APPEND);
-        if(!$this->isAuth()){
-            if(!empty($_REQUEST['auth'])){
+    public function auth(): void
+    {
+        if (!$this->isAuth()) {
+            if (!empty($_REQUEST['auth']) && is_string($_REQUEST['auth'])) {
                 $this->verify($_REQUEST['auth']);
-            }
-            else{
+            } else {
                 $this->check();
             }
         }
     }
-    
-    /**
-     * Chiude la sessione locale e quella del SSO
-     * @return void
-     */
-    public function logout(){
-        if($this->isAuth()){
-            $data = ['Operation'=>'LogoutSito','IdSessioneSSO'=>$this->id_sso,'IdSessioneASPNET'=>$this->id_aspnet];
-            $this->httpPost(self::COHESION2_WEB,$data);
+
+    /** Chiude la sessione locale e quella del SSO. */
+    public function logout(): void
+    {
+        if ($this->isAuth()) {
+            $data = [
+                'Operation'        => 'LogoutSito',
+                'IdSessioneSSO'    => $this->id_sso,
+                'IdSessioneASPNET' => $this->id_aspnet,
+            ];
+            $this->httpPost(self::COHESION2_WEB, $data);
             unset($_SESSION[$this->session_name]);
         }
     }
-    
-    /**
-     * Chiude la sessione locale lasciando aperta quella del SSO
-     * @return void
-     */
-    public function logoutLocal(){
-        if($this->isAuth()){
+
+    /** Chiude la sessione locale lasciando aperta quella del SSO. */
+    public function logoutLocal(): void
+    {
+        if ($this->isAuth()) {
             unset($_SESSION[$this->session_name]);
         }
     }
-    
-    private function check(){
-        //file_put_contents('log.txt',__METHOD__."\n",FILE_APPEND);
-        $protocol = ($_SERVER["SERVER_PORT"] == 443) ? 'https://' : 'http://';
-    	$urlPagina = $protocol.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+
+    private function check(): never
+    {
+        $protocol = ($_SERVER['SERVER_PORT'] == 443) ? 'https://' : 'http://';
+        $urlPagina = $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
         $urlPagina .= ($_SERVER['QUERY_STRING']) ? '&' : '?';
         $urlPagina .= 'cohesionCheck=1';
         $xmlAuth = '<dsAuth xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/Auth.xsd">
@@ -200,79 +186,90 @@ class Cohesion2{
                 <esito_auth_sa />
                 <id_sessione_sa />
                 <id_sessione_aspnet_sa />
-                <url_validate><![CDATA['.$urlPagina.']]></url_validate>
-                <url_richiesta><![CDATA['.$urlPagina.']]></url_richiesta>
+                <url_validate><![CDATA[' . $urlPagina . ']]></url_validate>
+                <url_richiesta><![CDATA[' . $urlPagina . ']]></url_richiesta>
                 <esito_auth_sso />
                 <id_sessione_sso />
                 <id_sessione_aspnet_sso />
-                <stilesheet>AuthRestriction='.$this->authRestriction.($this->eIDAS? ';'.self::EIDAS_FLAG : '').($this->SPIDProPurpose ? ';'.self::PURPOSE_FLAG.$this->SPIDProPurpose: '').'</stilesheet>
-                <AuthRestriction xmlns="">'.$this->authRestriction.'</AuthRestriction>
+                <stilesheet>AuthRestriction=' . $this->authRestriction
+                    . ($this->eIDAS ? ';' . self::EIDAS_FLAG : '')
+                    . ($this->SPIDProPurpose !== null ? ';' . self::PURPOSE_FLAG . $this->SPIDProPurpose : '')
+                . '</stilesheet>
+                <AuthRestriction xmlns="">' . $this->authRestriction . '</AuthRestriction>
             </auth>
         </dsAuth>';
-        //file_put_contents('log.txt',$xmlAuth."\n",FILE_APPEND);
         $auth = urlencode(base64_encode($xmlAuth));
-        if($this->saml20){
-            $urlLogin = self::COHESION2_SAML20_CHECK.$auth;
+        if ($this->saml20) {
+            $urlLogin = self::COHESION2_SAML20_CHECK . $auth;
+        } else {
+            $urlLogin = $this->sso ? self::COHESION2_CHECK . $auth : self::COHESION2_LOGIN . $auth;
         }
-        else{
-            $urlLogin = ($this->sso) ? self::COHESION2_CHECK.$auth : self::COHESION2_LOGIN.$auth;
-        }
-        //file_put_contents('log.txt',$urlLogin."\n",FILE_APPEND);
         header("Location: $urlLogin");
         exit;
     }
-    
-    private function verify($auth){
-        //file_put_contents('log.txt',__METHOD__."\n",FILE_APPEND);
+
+    /**
+     * @throws Cohesion2Exception
+     */
+    private function verify(string $auth): void
+    {
         $xml = trim(base64_decode($auth));
-        //file_put_contents('log.txt',$xml."\n",FILE_APPEND);
-        $domXML = new \DOMDocument;
+        $domXML = new \DOMDocument();
         $domXML->loadXML($xml);
-        $this->id_sso = $domXML->getElementsByTagName('id_sessione_sso')->item(0)->nodeValue;
-        $this->id_aspnet = $domXML->getElementsByTagName('id_sessione_aspnet_sso')->item(0)->nodeValue;
-        $this->username = $domXML->getElementsByTagName('user')->item(0)->nodeValue;
-        $esito = $domXML->getElementsByTagName('esito_auth_sso')->item(0)->nodeValue;
-        if($esito!='OK' || $this->id_sso=='' || $this->id_aspnet=='') 
+        $this->id_sso    = $domXML->getElementsByTagName('id_sessione_sso')->item(0)?->nodeValue;
+        $this->id_aspnet = $domXML->getElementsByTagName('id_sessione_aspnet_sso')->item(0)?->nodeValue;
+        $this->username  = $domXML->getElementsByTagName('user')->item(0)?->nodeValue;
+        $esito           = $domXML->getElementsByTagName('esito_auth_sso')->item(0)?->nodeValue;
+        if ($esito !== 'OK' || $this->id_sso === null || $this->id_sso === '' || $this->id_aspnet === null || $this->id_aspnet === '') {
             throw new Cohesion2Exception("Errore in fase di autenticazione ($esito,$this->id_sso,$this->id_aspnet)");
-        
-        //file_put_contents('log.txt',"Recupero profilo tramite pagina web\n",FILE_APPEND);
+        }
+
         $url = $this->saml20 ? self::COHESION2_SAML20_WEB : self::COHESION2_WEB;
-        $data = ['Operation'=>'GetCredential','IdSessioneSSO'=>$this->id_sso,'IdSessioneASPNET'=>$this->id_aspnet];
-        $result = $this->httpPost($url,$data);
+        $data = [
+            'Operation'        => 'GetCredential',
+            'IdSessioneSSO'    => $this->id_sso,
+            'IdSessioneASPNET' => $this->id_aspnet,
+        ];
+        $result = $this->httpPost($url, $data);
         $domXML->loadXML($result);
-        //file_put_contents('log.txt',var_export($result,1)."\n",FILE_APPEND);
         $profilo = simplexml_import_dom($domXML);
         $base = current($profilo->xpath('//base'));
-        if(is_object($base) && $base->login){
+        if (is_object($base) && $base->login) {
             $resp = [];
-            foreach($base->children() as $node){
-                $resp[$node->getName()] = (string)$node;
+            foreach ($base->children() as $node) {
+                $resp[$node->getName()] = (string) $node;
             }
             $this->profile = $resp;
             $_SESSION[$this->session_name] = serialize($this);
+        } else {
+            throw new Cohesion2Exception('Profilo utente non trovato nella risposta fornita da Cohesion2');
         }
-        else throw new Cohesion2Exception('Profilo utente non trovato nella risposta fornita da Cohesion2');
     }
-    
-    private function httpPost($url,$data){
-        $data = http_build_query($data);
-        $context  = stream_context_create([
+
+    /**
+     * @param array<string, scalar|null> $data
+     * @throws Cohesion2Exception
+     */
+    private function httpPost(string $url, array $data): string
+    {
+        $payload = http_build_query($data);
+        $context = stream_context_create([
             'http' => [
-                'header' => "Content-type: application/x-www-form-urlencoded\r\nContent-Length: ".strlen($data)."\r\nConnection: close\r\n",
-                'method' => 'POST',
+                'header'           => "Content-type: application/x-www-form-urlencoded\r\nContent-Length: " . strlen($payload) . "\r\nConnection: close\r\n",
+                'method'           => 'POST',
                 'protocol_version' => '1.2',
-                'content' => $data
+                'content'          => $payload,
             ],
             'ssl' => [
-                'ciphers' => 'DEFAULT:!DH',
-                'verify_peer' => false,
-                'verify_peer_name' => false
-            ]
+                'ciphers'          => 'DEFAULT:!DH',
+                'verify_peer'      => false,
+                'verify_peer_name' => false,
+            ],
         ]);
-        $result = @file_get_contents($url,false,$context);
-        if($result===false){
+        $result = @file_get_contents($url, false, $context);
+        if ($result === false) {
             $error = error_get_last();
-            throw new Cohesion2Exception($error['message']);
+            throw new Cohesion2Exception($error['message'] ?? 'Errore sconosciuto in httpPost');
         }
         return $result;
     }
