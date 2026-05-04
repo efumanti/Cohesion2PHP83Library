@@ -32,6 +32,7 @@ class Cohesion2
     private bool $saml20 = false;
     private bool $eIDAS = false;
     private ?string $SPIDProPurpose = null;
+    private bool $tlsVerify = true;
 
     /** ID sessione SSO */
     public ?string $id_sso = null;
@@ -136,6 +137,22 @@ class Cohesion2
     {
         $this->useSAML20(true);
         $this->SPIDProPurpose = implode('|', $SPIDProPurposes);
+        return $this;
+    }
+
+    /**
+     * Disabilita la verifica del certificato TLS nelle chiamate HTTPS verso
+     * Cohesion2.
+     *
+     * SCONSIGLIATO. Esposto solo per consentire l'uso della libreria in
+     * ambienti in cui la catena di certificati non è verificabile (es.
+     * proxy MITM aziendale con CA non installata sul server). In tutti gli
+     * altri casi mantenere la verifica attiva: il certificato di
+     * cohesion2.regione.marche.it è emesso da una CA pubblica.
+     */
+    public function disableTLSVerification(): static
+    {
+        $this->tlsVerify = false;
         return $this;
     }
 
@@ -262,25 +279,49 @@ class Cohesion2
      */
     private function httpPost(string $url, array $data): string
     {
-        $payload = http_build_query($data);
-        $context = stream_context_create([
-            'http' => [
-                'header'           => "Content-type: application/x-www-form-urlencoded\r\nContent-Length: " . strlen($payload) . "\r\nConnection: close\r\n",
-                'method'           => 'POST',
-                'protocol_version' => '1.2',
-                'content'          => $payload,
-            ],
-            'ssl' => [
-                'ciphers'          => 'DEFAULT:!DH',
-                'verify_peer'      => false,
-                'verify_peer_name' => false,
-            ],
-        ]);
-        $result = @file_get_contents($url, false, $context);
-        if ($result === false) {
-            $error = error_get_last();
-            throw new Cohesion2Exception($error['message'] ?? 'Errore sconosciuto in httpPost');
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new Cohesion2Exception('Impossibile inizializzare cURL');
         }
-        return $result;
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query($data),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Connection: close',
+            ],
+            CURLOPT_SSL_VERIFYPEER => $this->tlsVerify,
+            CURLOPT_SSL_VERIFYHOST => $this->tlsVerify ? 2 : 0,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+
+        $result   = curl_exec($ch);
+        $errno    = curl_errno($ch);
+        $error    = curl_error($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($result === false || $errno !== 0) {
+            throw new Cohesion2Exception(sprintf(
+                'Errore cURL chiamando %s: [%d] %s',
+                $url,
+                $errno,
+                $error !== '' ? $error : 'errore sconosciuto'
+            ));
+        }
+
+        if ($httpCode < 200 || $httpCode >= 300) {
+            throw new Cohesion2Exception(sprintf(
+                'HTTP %d ricevuto da %s',
+                $httpCode,
+                $url
+            ));
+        }
+
+        return is_string($result) ? $result : '';
     }
 }
