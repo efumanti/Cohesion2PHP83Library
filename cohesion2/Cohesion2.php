@@ -262,6 +262,11 @@ class Cohesion2
                 $resp[$node->getName()] = (string) $node;
             }
             $this->profile = $resp;
+            // Rigenerazione dell'id di sessione: passaggio a livello di privilegio
+            // (da anonimo ad autenticato), mitigazione di session fixation.
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_regenerate_id(true);
+            }
             $_SESSION[$this->session_name] = [
                 'id_sso'    => $this->id_sso,
                 'id_aspnet' => $this->id_aspnet,
