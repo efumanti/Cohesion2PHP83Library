@@ -30,6 +30,7 @@ class Cohesion2
     /** @var string[] Whitelist degli host accettati per la callback URL. */
     private readonly array $allowedHosts;
     private readonly bool $trustProxy;
+    private readonly string $siteId;
     private string $authRestriction = '0,1,2,3';
     private bool $sso = true;
     private bool $saml20 = false;
@@ -66,15 +67,22 @@ class Cohesion2
      *                      Da abilitare solo se l'applicazione è esposta unicamente
      *                      attraverso un reverse proxy fidato; altrimenti l'header è
      *                      spoofabile dal client.
+     * @param string|null   $siteId       Identificativo applicativo (`<id_sito>`)
+     *                      inviato a Cohesion2. Se null (default), viene letto dalla
+     *                      variabile d'ambiente `COHESION2_SITE_ID`; in mancanza
+     *                      anche di quella, viene usato 'TEST' (storico, da non
+     *                      usare in produzione).
      */
     public function __construct(
         string $session_name = 'cohesion2',
         ?array $allowedHosts = null,
         ?bool $trustProxy = null,
+        ?string $siteId = null,
     ) {
         $this->session_name = $session_name;
         $this->allowedHosts = $this->resolveAllowedHosts($allowedHosts);
         $this->trustProxy   = $this->resolveTrustProxy($trustProxy);
+        $this->siteId       = $this->resolveSiteId($siteId);
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
@@ -233,6 +241,20 @@ class Cohesion2
      *
      * @throws Cohesion2Exception se HTTP_HOST non è nella whitelist
      */
+    private function resolveSiteId(?string $explicit): string
+    {
+        if ($explicit !== null && $explicit !== '') {
+            return $explicit;
+        }
+        $env = $_ENV['COHESION2_SITE_ID']
+            ?? $_SERVER['COHESION2_SITE_ID']
+            ?? getenv('COHESION2_SITE_ID');
+        if (is_string($env) && $env !== '') {
+            return $env;
+        }
+        return 'TEST';
+    }
+
     private function resolveTrustProxy(?bool $explicit): bool
     {
         if ($explicit !== null) {
@@ -408,7 +430,7 @@ class Cohesion2
         foreach (['user', 'id_sa'] as $name) {
             $auth->appendChild($dom->createElementNS($ns, $name));
         }
-        $auth->appendChild($dom->createElementNS($ns, 'id_sito', 'TEST'));
+        $auth->appendChild($dom->createElementNS($ns, 'id_sito', $this->siteId));
         foreach (['esito_auth_sa', 'id_sessione_sa', 'id_sessione_aspnet_sa'] as $name) {
             $auth->appendChild($dom->createElementNS($ns, $name));
         }

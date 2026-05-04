@@ -44,6 +44,27 @@ Per disabilitare, eventualmente il SSO, e forzare quindi sempre all’autenticaz
       } 
 ```
 
+## Identificativo applicativo (`id_sito`)
+
+Cohesion2 identifica l'applicazione client tramite il campo `<id_sito>`
+incluso nel payload di richiesta. Fino alla 3.x questo valore era
+hardcoded a `'TEST'`. Dalla 4.0.0 si imposta tramite il quarto parametro
+del costruttore o via variabile d'ambiente `COHESION2_SITE_ID`.
+
+```php
+$cohesion = new Cohesion2('cohesion2', null, null, 'PORTALE_AZIENDA');
+```
+
+oppure:
+
+```
+COHESION2_SITE_ID=PORTALE_AZIENDA
+```
+
+Il default rimane `'TEST'` per compatibilità con installazioni esistenti,
+ma è da sostituire prima del passaggio in produzione concordando il valore
+con il referente Cohesion2 della Regione Marche.
+
 ## Configurazione di sicurezza: whitelist degli host di callback
 
 L'URL di callback inviata a Cohesion2 al termine dell'autenticazione viene
