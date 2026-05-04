@@ -290,26 +290,7 @@ class Cohesion2
         $urlPagina = $protocol . $host . $_SERVER['REQUEST_URI'];
         $urlPagina .= ($_SERVER['QUERY_STRING']) ? '&' : '?';
         $urlPagina .= 'cohesionCheck=1';
-        $xmlAuth = '<dsAuth xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/Auth.xsd">
-            <auth>
-                <user />
-                <id_sa />
-                <id_sito>TEST</id_sito>
-                <esito_auth_sa />
-                <id_sessione_sa />
-                <id_sessione_aspnet_sa />
-                <url_validate><![CDATA[' . $urlPagina . ']]></url_validate>
-                <url_richiesta><![CDATA[' . $urlPagina . ']]></url_richiesta>
-                <esito_auth_sso />
-                <id_sessione_sso />
-                <id_sessione_aspnet_sso />
-                <stilesheet>AuthRestriction=' . $this->authRestriction
-                    . ($this->eIDAS ? ';' . self::EIDAS_FLAG : '')
-                    . ($this->SPIDProPurpose !== null ? ';' . self::PURPOSE_FLAG . $this->SPIDProPurpose : '')
-                . '</stilesheet>
-                <AuthRestriction xmlns="">' . $this->authRestriction . '</AuthRestriction>
-            </auth>
-        </dsAuth>';
+        $xmlAuth = $this->buildAuthXml($urlPagina);
         $auth = urlencode(base64_encode($xmlAuth));
         if ($this->saml20) {
             $urlLogin = self::COHESION2_SAML20_CHECK . $auth;
@@ -318,6 +299,84 @@ class Cohesion2
         }
         header("Location: $urlLogin");
         exit;
+    }
+
+    /**
+     * Costruisce il payload XML inviato a Cohesion2 al passo di check.
+     *
+     * La libreria 3.x componeva l'XML per concatenazione di stringhe: i
+     * valori di `$urlPagina` (derivato da $_SERVER) e `$authRestriction`
+     * (impostabile via setAuthRestriction) finivano nel markup senza
+     * escaping — un input contenente `]]>` o caratteri di markup poteva
+     * iniettare nodi nel payload (CWE-91, XML Injection).
+     *
+     * Qui il documento è costruito con \DOMDocument: il testo dei nodi è
+     * escapato automaticamente da libxml; i CDATA sono protetti dal
+     * controllo esplicito su `]]>`, sequenza non rappresentabile in
+     * un'unica sezione CDATA.
+     *
+     * @throws Cohesion2Exception se la URL di callback contiene una
+     *                            sequenza non valida in CDATA.
+     */
+    private function buildAuthXml(string $urlPagina): string
+    {
+        if (str_contains($urlPagina, ']]>')) {
+            throw new Cohesion2Exception(
+                'URL di callback contiene una sequenza non rappresentabile in CDATA'
+            );
+        }
+
+        $ns = 'http://tempuri.org/Auth.xsd';
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $dom->formatOutput = true;
+
+        $dsAuth = $dom->createElementNS($ns, 'dsAuth');
+        $dsAuth->setAttributeNS(
+            'http://www.w3.org/2000/xmlns/',
+            'xmlns:xsi',
+            'http://www.w3.org/2001/XMLSchema-instance'
+        );
+        $dom->appendChild($dsAuth);
+
+        $auth = $dom->createElementNS($ns, 'auth');
+        $dsAuth->appendChild($auth);
+
+        foreach (['user', 'id_sa'] as $name) {
+            $auth->appendChild($dom->createElementNS($ns, $name));
+        }
+        $auth->appendChild($dom->createElementNS($ns, 'id_sito', 'TEST'));
+        foreach (['esito_auth_sa', 'id_sessione_sa', 'id_sessione_aspnet_sa'] as $name) {
+            $auth->appendChild($dom->createElementNS($ns, $name));
+        }
+
+        $urlValidate = $dom->createElementNS($ns, 'url_validate');
+        $urlValidate->appendChild($dom->createCDATASection($urlPagina));
+        $auth->appendChild($urlValidate);
+
+        $urlRichiesta = $dom->createElementNS($ns, 'url_richiesta');
+        $urlRichiesta->appendChild($dom->createCDATASection($urlPagina));
+        $auth->appendChild($urlRichiesta);
+
+        foreach (['esito_auth_sso', 'id_sessione_sso', 'id_sessione_aspnet_sso'] as $name) {
+            $auth->appendChild($dom->createElementNS($ns, $name));
+        }
+
+        $stilesheet = sprintf(
+            'AuthRestriction=%s%s%s',
+            $this->authRestriction,
+            $this->eIDAS ? ';' . self::EIDAS_FLAG : '',
+            $this->SPIDProPurpose !== null ? ';' . self::PURPOSE_FLAG . $this->SPIDProPurpose : ''
+        );
+        $auth->appendChild($dom->createElementNS($ns, 'stilesheet', $stilesheet));
+
+        // <AuthRestriction xmlns=""> esplicitamente fuori dal default namespace.
+        $auth->appendChild($dom->createElementNS('', 'AuthRestriction', $this->authRestriction));
+
+        $output = $dom->saveXML();
+        if ($output === false) {
+            throw new Cohesion2Exception('Impossibile serializzare il payload XML di autenticazione');
+        }
+        return $output;
     }
 
     /**
