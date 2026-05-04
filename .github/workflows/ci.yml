@@ -1,0 +1,68 @@
+# Continuous Integration per la libreria Cohesion2.
+# Esegue su ogni push e PR il lint dei sorgenti e una verifica
+# del meccanismo di autoload (PSR-4 e caricamento manuale).
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - 'feat/**'
+      - 'fix/**'
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  lint:
+    name: Lint e autoload (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, dom, libxml, simplexml
+          coverage: none
+          tools: composer:v2
+
+      - name: Validazione composer.json
+        run: composer validate --strict
+
+      - name: Installazione dipendenze
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Lint sintattico dei sorgenti PHP
+        run: |
+          set -e
+          find cohesion2 test -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l
+
+      - name: Verifica autoload PSR-4 (con Composer)
+        run: |
+          php -r '
+            require "vendor/autoload.php";
+            $ok = class_exists("andreaval\\\\Cohesion2\\\\Cohesion2")
+                && class_exists("andreaval\\\\Cohesion2\\\\Cohesion2Exception");
+            if (!$ok) { fwrite(STDERR, "autoload PSR-4 KO\n"); exit(1); }
+            echo "autoload PSR-4 OK", PHP_EOL;
+          '
+
+      - name: Verifica caricamento manuale (senza Composer)
+        run: |
+          php -r '
+            require "cohesion2/Cohesion2.php";
+            $ok = class_exists("andreaval\\\\Cohesion2\\\\Cohesion2")
+                && class_exists("andreaval\\\\Cohesion2\\\\Cohesion2Exception");
+            if (!$ok) { fwrite(STDERR, "caricamento manuale KO\n"); exit(1); }
+            echo "caricamento manuale OK", PHP_EOL;
+          '

@@ -3,3 +3,11 @@
 /nbproject/
 /cohesion2/cohesion2.crt.pem
 /cohesion2/cohesion2.key.pem
+
+# Composer (per una libreria, vendor/ e composer.lock non vanno versionati)
+/vendor/
+/composer.lock
+
+# IDE
+/.idea/
+/.vscode/
