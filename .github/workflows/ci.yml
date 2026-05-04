@@ -66,3 +66,6 @@ jobs:
             if (!$ok) { fwrite(STDERR, "caricamento manuale KO\n"); exit(1); }
             echo "caricamento manuale OK", PHP_EOL;
           '
+
+      - name: Esecuzione test PHPUnit
+        run: vendor/bin/phpunit --no-progress
