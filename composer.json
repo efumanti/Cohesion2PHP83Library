@@ -16,9 +16,13 @@
         "source": "https://github.com/andreaval/Cohesion2PHPLibrary"
     },
     "require": {
-        "php": ">=5.4.0"
+        "php": "^8.3",
+        "ext-curl": "*",
+        "ext-dom": "*",
+        "ext-libxml": "*",
+        "ext-simplexml": "*"
     },
     "autoload": {
-        "psr-0": { "andreaval\\Cohesion2\\": "cohesion2/" }
+        "psr-4": { "andreaval\\Cohesion2\\": "cohesion2/" }
     }
 }

@@ -1,5 +1,10 @@
 <?php
 namespace andreaval\Cohesion2;
+
+if (!class_exists(__NAMESPACE__ . '\\Cohesion2Exception')) {
+    require_once __DIR__ . '/Cohesion2Exception.php';
+}
+
 /**
  * Classe per la gestione del SSO di Cohesion2
  * @version 3.0.1 30/03/2023 17.34
@@ -261,7 +266,7 @@ class Cohesion2{
             'ssl' => [
                 'ciphers' => 'DEFAULT:!DH',
                 'verify_peer' => false,
-                'verify_peer_name' => false 
+                'verify_peer_name' => false
             ]
         ]);
         $result = @file_get_contents($url,false,$context);
@@ -272,5 +277,3 @@ class Cohesion2{
         return $result;
     }
 }
-
-class Cohesion2Exception extends \Exception{}
