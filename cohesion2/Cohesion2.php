@@ -352,25 +352,59 @@ class Cohesion2
         }
     }
 
-    /** Chiude la sessione locale e quella del SSO. */
+    /**
+     * Chiude la sessione locale e quella del SSO.
+     *
+     * La sessione locale viene invalidata SUBITO, prima della chiamata
+     * remota a Cohesion2: in caso di errore di rete (timeout, host
+     * irraggiungibile, HTTP 5xx) l'utente risulta comunque sloggato lato
+     * applicazione, anche se il logout SSO server-side non è riuscito.
+     * L'eccezione viene propagata al chiamante perché possa decidere se
+     * informare l'utente.
+     *
+     * @throws Cohesion2Exception se la chiamata di logout SSO fallisce.
+     */
     public function logout(): void
     {
-        if ($this->isAuth()) {
-            $data = [
-                'Operation'        => 'LogoutSito',
-                'IdSessioneSSO'    => $this->id_sso,
-                'IdSessioneASPNET' => $this->id_aspnet,
-            ];
-            $this->httpPost(self::COHESION2_WEB, $data);
-            unset($_SESSION[$this->session_name]);
+        if (!$this->isAuth()) {
+            return;
         }
+        $idSso    = $this->id_sso;
+        $idAspnet = $this->id_aspnet;
+        $this->clearLocalSession();
+        $this->httpPost(self::COHESION2_WEB, [
+            'Operation'        => 'LogoutSito',
+            'IdSessioneSSO'    => $idSso,
+            'IdSessioneASPNET' => $idAspnet,
+        ]);
     }
 
     /** Chiude la sessione locale lasciando aperta quella del SSO. */
     public function logoutLocal(): void
     {
-        if ($this->isAuth()) {
-            unset($_SESSION[$this->session_name]);
+        if (!$this->isAuth()) {
+            return;
+        }
+        $this->clearLocalSession();
+    }
+
+    /**
+     * Invalida lo stato di autenticazione lato applicazione.
+     *
+     * Rimuove la voce in $_SESSION, azzera le proprietà del profilo e
+     * rigenera l'id di sessione (mitigazione di session fixation post-logout:
+     * un attaccante che abbia osservato l'id durante l'autenticazione non
+     * deve poterlo riutilizzare).
+     */
+    private function clearLocalSession(): void
+    {
+        unset($_SESSION[$this->session_name]);
+        $this->id_sso    = null;
+        $this->id_aspnet = null;
+        $this->username  = null;
+        $this->profile   = null;
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
         }
     }
 
