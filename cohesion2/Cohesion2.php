@@ -29,6 +29,7 @@ class Cohesion2
     private readonly string $session_name;
     /** @var string[] Whitelist degli host accettati per la callback URL. */
     private readonly array $allowedHosts;
+    private readonly bool $trustProxy;
     private string $authRestriction = '0,1,2,3';
     private bool $sso = true;
     private bool $saml20 = false;
@@ -58,13 +59,22 @@ class Cohesion2
      *                      `SERVER_NAME` invece di `HTTP_HOST`. Si consiglia di
      *                      popolare sempre la whitelist negli ambienti di
      *                      produzione (vedi README e CWE-601).
+     * @param bool|null     $trustProxy   Abilita la lettura di
+     *                      `X-Forwarded-Proto` per determinare lo schema HTTP/HTTPS
+     *                      della callback URL. Se null (default), viene letta dalla
+     *                      variabile d'ambiente `COHESION2_TRUST_PROXY` (truthy/falsy).
+     *                      Da abilitare solo se l'applicazione è esposta unicamente
+     *                      attraverso un reverse proxy fidato; altrimenti l'header è
+     *                      spoofabile dal client.
      */
     public function __construct(
         string $session_name = 'cohesion2',
         ?array $allowedHosts = null,
+        ?bool $trustProxy = null,
     ) {
         $this->session_name = $session_name;
         $this->allowedHosts = $this->resolveAllowedHosts($allowedHosts);
+        $this->trustProxy   = $this->resolveTrustProxy($trustProxy);
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
@@ -223,6 +233,60 @@ class Cohesion2
      *
      * @throws Cohesion2Exception se HTTP_HOST non è nella whitelist
      */
+    private function resolveTrustProxy(?bool $explicit): bool
+    {
+        if ($explicit !== null) {
+            return $explicit;
+        }
+        $env = $_ENV['COHESION2_TRUST_PROXY']
+            ?? $_SERVER['COHESION2_TRUST_PROXY']
+            ?? getenv('COHESION2_TRUST_PROXY');
+        if (!is_string($env) || $env === '') {
+            return false;
+        }
+        return (bool) filter_var($env, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Risolve lo schema HTTP/HTTPS della callback URL.
+     *
+     * Ordine di precedenza:
+     *   1. se `trustProxy` è attivo, l'header `X-Forwarded-Proto` (può
+     *      contenere una lista CSV — si considera il primo elemento, cioè
+     *      quello più vicino al client);
+     *   2. la server variable `HTTPS`, popolata dal web server quando TLS
+     *      è terminato sulla macchina che esegue PHP (Apache `mod_ssl`,
+     *      Nginx con `fastcgi_param HTTPS`, ecc.);
+     *   3. il fallback storico `SERVER_PORT == 443`.
+     *
+     * Affidarsi al solo punto 3 è scorretto se l'app è dietro un load
+     * balancer che termina TLS: in quel caso `SERVER_PORT` è 80 e la
+     * callback URL viene marcata `http://`, esponendo il token di
+     * autenticazione in chiaro nel redirect.
+     */
+    private function resolveProtocol(): string
+    {
+        if ($this->trustProxy) {
+            $forwarded = (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '');
+            if ($forwarded !== '') {
+                $first = trim(explode(',', $forwarded)[0]);
+                if (strcasecmp($first, 'https') === 0) {
+                    return 'https://';
+                }
+                if (strcasecmp($first, 'http') === 0) {
+                    return 'http://';
+                }
+            }
+        }
+
+        $https = (string) ($_SERVER['HTTPS'] ?? '');
+        if ($https !== '' && strcasecmp($https, 'off') !== 0) {
+            return 'https://';
+        }
+
+        return ((int) ($_SERVER['SERVER_PORT'] ?? 0)) === 443 ? 'https://' : 'http://';
+    }
+
     private function resolveCallbackHost(): string
     {
         $httpHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
@@ -285,7 +349,7 @@ class Cohesion2
 
     private function check(): never
     {
-        $protocol = ($_SERVER['SERVER_PORT'] == 443) ? 'https://' : 'http://';
+        $protocol = $this->resolveProtocol();
         $host = $this->resolveCallbackHost();
         $urlPagina = $protocol . $host . $_SERVER['REQUEST_URI'];
         $urlPagina .= ($_SERVER['QUERY_STRING']) ? '&' : '?';

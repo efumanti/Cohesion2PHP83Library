@@ -80,6 +80,27 @@ $cohesion->auth();
 
 In ambiente di produzione si consiglia di **dichiarare sempre** la whitelist.
 
+### Applicazioni dietro un reverse proxy / load balancer
+
+Quando il TLS è terminato a monte (load balancer, CDN, ingress controller),
+`$_SERVER['SERVER_PORT']` vale 80 e la libreria, in assenza di altri segnali,
+costruirebbe una callback URL `http://…` esponendo il token nel redirect.
+
+Il terzo parametro del costruttore — `trustProxy` — abilita la lettura di
+`X-Forwarded-Proto` per determinare lo schema. **Va attivato solo se l'app
+è raggiungibile esclusivamente tramite il proxy**: l'header è altrimenti
+spoofabile.
+
+```php
+$cohesion = new Cohesion2('cohesion2', null, true);
+```
+
+oppure via variabile d'ambiente:
+
+```
+COHESION2_TRUST_PROXY=1
+```
+
 ## Abilitazione SAML 2.0
 E' possibile indicare a Cohesion di utilizzare lo standard SAML 2.0 tramite l'apposito metodo **useSAML20()** . L'utilizzo di tale metodo permette agli utenti di autenticarsi anche tramite sistema SPID.
 
