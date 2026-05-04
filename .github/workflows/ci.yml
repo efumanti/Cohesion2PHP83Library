@@ -51,8 +51,8 @@ jobs:
         run: |
           php -r '
             require "vendor/autoload.php";
-            $ok = class_exists("andreaval\\\\Cohesion2\\\\Cohesion2")
-                && class_exists("andreaval\\\\Cohesion2\\\\Cohesion2Exception");
+            $ok = class_exists("andreaval\\Cohesion2\\Cohesion2")
+                && class_exists("andreaval\\Cohesion2\\Cohesion2Exception");
             if (!$ok) { fwrite(STDERR, "autoload PSR-4 KO\n"); exit(1); }
             echo "autoload PSR-4 OK", PHP_EOL;
           '
@@ -61,8 +61,8 @@ jobs:
         run: |
           php -r '
             require "cohesion2/Cohesion2.php";
-            $ok = class_exists("andreaval\\\\Cohesion2\\\\Cohesion2")
-                && class_exists("andreaval\\\\Cohesion2\\\\Cohesion2Exception");
+            $ok = class_exists("andreaval\\Cohesion2\\Cohesion2")
+                && class_exists("andreaval\\Cohesion2\\Cohesion2Exception");
             if (!$ok) { fwrite(STDERR, "caricamento manuale KO\n"); exit(1); }
             echo "caricamento manuale OK", PHP_EOL;
           '
