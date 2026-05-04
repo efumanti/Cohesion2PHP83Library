@@ -1,0 +1,23 @@
+# Normalizza i fine riga: in repo sempre LF, indipendentemente dalla
+# configurazione locale (core.autocrlf) dei contributor.
+* text=auto eol=lf
+
+# Forza testo per i sorgenti
+*.php   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.xml   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# File binari espliciti
+*.doc   binary
+*.docx  binary
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pem   binary
+*.crt   binary
+*.key   binary
