@@ -27,6 +27,8 @@ class Cohesion2
     public const PURPOSE_FLAG           = 'purpose=';
 
     private readonly string $session_name;
+    /** @var string[] Whitelist degli host accettati per la callback URL. */
+    private readonly array $allowedHosts;
     private string $authRestriction = '0,1,2,3';
     private bool $sso = true;
     private bool $saml20 = false;
@@ -47,11 +49,22 @@ class Cohesion2
     public ?array $profile = null;
 
     /**
-     * @param string $session_name Nome da assegnare alla variabile di sessione. Default: cohesion2
+     * @param string        $session_name Nome della variabile di sessione. Default: 'cohesion2'.
+     * @param string[]|null $allowedHosts Whitelist di host accettati come callback
+     *                      URL post-autenticazione. Se null (default), viene letta
+     *                      dalla variabile d'ambiente `COHESION2_ALLOWED_HOSTS`
+     *                      come CSV (es. `app.example.com,www.example.com`); se
+     *                      neppure quella è impostata, la callback URL usa
+     *                      `SERVER_NAME` invece di `HTTP_HOST`. Si consiglia di
+     *                      popolare sempre la whitelist negli ambienti di
+     *                      produzione (vedi README e CWE-601).
      */
-    public function __construct(string $session_name = 'cohesion2')
-    {
+    public function __construct(
+        string $session_name = 'cohesion2',
+        ?array $allowedHosts = null,
+    ) {
         $this->session_name = $session_name;
+        $this->allowedHosts = $this->resolveAllowedHosts($allowedHosts);
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
@@ -157,6 +170,82 @@ class Cohesion2
     }
 
     /**
+     * Risolve la whitelist degli host accettati come callback URL.
+     *
+     * Ordine di precedenza:
+     *   1. parametro `$allowedHosts` esplicito del costruttore
+     *   2. variabile d'ambiente `COHESION2_ALLOWED_HOSTS` (CSV)
+     *
+     * Lettura da `$_ENV`, `$_SERVER` e `getenv()` per coprire le diverse
+     * convenzioni dei framework e dei loader .env (vlucas/phpdotenv,
+     * Symfony Dotenv, Laravel, ecc.).
+     *
+     * @param  string[]|null $explicit
+     * @return string[]
+     */
+    private function resolveAllowedHosts(?array $explicit): array
+    {
+        if ($explicit !== null) {
+            return array_values(array_filter(
+                array_map(static fn($v): string => trim((string) $v), $explicit),
+                static fn(string $v): bool => $v !== ''
+            ));
+        }
+        $env = $_ENV['COHESION2_ALLOWED_HOSTS']
+            ?? $_SERVER['COHESION2_ALLOWED_HOSTS']
+            ?? getenv('COHESION2_ALLOWED_HOSTS');
+        if (!is_string($env) || $env === '') {
+            return [];
+        }
+        return array_values(array_filter(
+            array_map('trim', explode(',', $env)),
+            static fn(string $v): bool => $v !== ''
+        ));
+    }
+
+    /**
+     * Restituisce l'host da usare nella callback URL inviata a Cohesion2.
+     *
+     * Difesa contro l'open redirect via Host header injection (CWE-601):
+     * `$_SERVER['HTTP_HOST']` proviene dall'header HTTP `Host`, controllato
+     * dal client. Se Cohesion2 non valida server-side i redirect autorizzati
+     * per il `id_sito` configurato, un attaccante può forzare la callback
+     * verso un host arbitrario e intercettare l'`auth=` con il token di
+     * sessione.
+     *
+     * Logica:
+     *   - se la whitelist è popolata, `HTTP_HOST` deve corrispondere
+     *     (case-insensitive) a uno dei valori dichiarati: in caso contrario
+     *     viene sollevata un'eccezione anziché redirezionare;
+     *   - se la whitelist è vuota, si usa `SERVER_NAME` (configurato lato
+     *     web server e non manipolabile via header HTTP) e solo come ultima
+     *     risorsa `HTTP_HOST`.
+     *
+     * @throws Cohesion2Exception se HTTP_HOST non è nella whitelist
+     */
+    private function resolveCallbackHost(): string
+    {
+        $httpHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
+
+        if ($this->allowedHosts !== []) {
+            if ($httpHost !== '') {
+                foreach ($this->allowedHosts as $allowed) {
+                    if (strcasecmp($httpHost, $allowed) === 0) {
+                        return $httpHost;
+                    }
+                }
+            }
+            throw new Cohesion2Exception(sprintf(
+                'Host non consentito nella callback URL: %s',
+                $httpHost !== '' ? $httpHost : '(Host header assente)'
+            ));
+        }
+
+        $serverName = (string) ($_SERVER['SERVER_NAME'] ?? '');
+        return $serverName !== '' ? $serverName : $httpHost;
+    }
+
+    /**
      * Autentica l'utente nel sistema.
      *
      * @throws Cohesion2Exception in caso di errore
@@ -197,7 +286,8 @@ class Cohesion2
     private function check(): never
     {
         $protocol = ($_SERVER['SERVER_PORT'] == 443) ? 'https://' : 'http://';
-        $urlPagina = $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+        $host = $this->resolveCallbackHost();
+        $urlPagina = $protocol . $host . $_SERVER['REQUEST_URI'];
         $urlPagina .= ($_SERVER['QUERY_STRING']) ? '&' : '?';
         $urlPagina .= 'cohesionCheck=1';
         $xmlAuth = '<dsAuth xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/Auth.xsd">

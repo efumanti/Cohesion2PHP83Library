@@ -44,6 +44,42 @@ Per disabilitare, eventualmente il SSO, e forzare quindi sempre all’autenticaz
       } 
 ```
 
+## Configurazione di sicurezza: whitelist degli host di callback
+
+L'URL di callback inviata a Cohesion2 al termine dell'autenticazione viene
+costruita a partire dall'host della richiesta corrente. L'header HTTP `Host`
+è però controllato dal client e, in assenza di una validazione, può essere
+manipolato per indurre Cohesion2 a redirigere l'utente verso un host
+arbitrario subito dopo il login (open redirect / token leakage, CWE-601).
+
+A partire dalla 4.0.0 la libreria accetta una whitelist di host autorizzati.
+Quando la whitelist è popolata, l'header `Host` deve corrispondere
+(case-insensitive) a uno dei valori dichiarati: in caso contrario `auth()`
+solleva `Cohesion2Exception`. Quando la whitelist è vuota, la libreria usa
+`$_SERVER['SERVER_NAME']` (configurato lato web server) anziché `HTTP_HOST`.
+
+**Impostazione via costruttore:**
+
+```php
+$cohesion = new Cohesion2('cohesion2', ['app.example.it', 'www.example.it']);
+$cohesion->auth();
+```
+
+**Impostazione via variabile d'ambiente** (utile con `.env`):
+
+```
+COHESION2_ALLOWED_HOSTS=app.example.it,www.example.it
+```
+
+```php
+// La libreria legge automaticamente $_ENV / $_SERVER / getenv() in questo
+// ordine. È compatibile con vlucas/phpdotenv, Symfony Dotenv e Laravel.
+$cohesion = new Cohesion2();
+$cohesion->auth();
+```
+
+In ambiente di produzione si consiglia di **dichiarare sempre** la whitelist.
+
 ## Abilitazione SAML 2.0
 E' possibile indicare a Cohesion di utilizzare lo standard SAML 2.0 tramite l'apposito metodo **useSAML20()** . L'utilizzo di tale metodo permette agli utenti di autenticarsi anche tramite sistema SPID.
 
