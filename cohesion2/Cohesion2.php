@@ -10,8 +10,8 @@ if (!class_exists(__NAMESPACE__ . '\\Cohesion2Exception')) {
 /**
  * Classe per la gestione del SSO di Cohesion2.
  *
- * @version 3.0.1 30/03/2023 17.34
- * @requires PHP 5.4
+ * @version 4.0.0 04/05/2026
+ * @requires PHP 8.3
  * @author Andrea Vallorani <andrea.vallorani@gmail.com>
  * @license MIT License <https://github.com/andreaval/Cohesion2PHPLibrary/blob/master/LICENSE>
  * @link http://cohesion.regione.marche.it/cohesioninformativo/

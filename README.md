@@ -3,8 +3,9 @@ Libreria per l'autenticazione al sistema di SSO Cohesion2 della Regione Marche.
 Questa libreria  permette di integrare il  Single Sign-On di Cohesion2 in siti o applicativi web sviluppati in linguaggio PHP. 
 
 ## Requisiti di installazione
-* PHP 5.4
-* Nel file php.ini  assicurarsi che il parametro allow_url_fopen sia impostato a On
+* PHP 8.3 o superiore
+* Estensione PHP `curl` abilitata (richiesta per le chiamate HTTPS verso Cohesion2)
+* Estensioni PHP `dom`, `libxml`, `simplexml` (di norma incluse nel pacchetto standard)
 
 ## Installazione
 Usando il package manager [composer](https://getcomposer.org/) installare il pacchetto *andreaval/cohesion2-library*
@@ -155,3 +156,7 @@ Libreria creata come lavoro personale da Andrea Vallorani (andrea.vallorani@gmai
 - 2018-04-25 pubblicata ver. 2.2.0 https://github.com/andreaval/Cohesion2PHPLibrary/releases/tag/2.2.0
 - 2023-03-20 integrate modifiche di @xavbeta dal fork https://github.com/regione-marche/Cohesion2PHPLibrary)
 - 2023-03-27 pubblicata ver. 3.0.0 https://github.com/andreaval/Cohesion2PHPLibrary/releases/tag/3.0.0
+- 2026-05-04 ver. 4.0.0 — modernizzazione a PHP 8.3:
+    - requisito minimo PHP 8.3, autoload PSR-4, dichiarazioni `strict_types` e tipizzazione completa di proprietà e metodi
+    - chiamate HTTPS riscritte con cURL e verifica TLS attiva di default (rimossa la dipendenza da `allow_url_fopen`)
+    - sessione salvata come array invece di oggetto serializzato (elimina il rischio di PHP Object Injection); le sessioni 3.x non sono compatibili
