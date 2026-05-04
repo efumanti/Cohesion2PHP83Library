@@ -268,7 +268,7 @@ final class Cohesion2Test extends TestCase
 
     public function testBuildAuthXmlIsWellFormed(): void
     {
-        $xml = $this->call(new Cohesion2(), 'buildAuthXml', 'https://app.example.it/login.php?cohesionCheck=1');
+        $xml = $this->buildXml(new Cohesion2(), 'https://app.example.it/login.php?cohesionCheck=1');
 
         $dom = new \DOMDocument();
         self::assertTrue($dom->loadXML($xml), 'XML non ben formato');
@@ -282,31 +282,36 @@ final class Cohesion2Test extends TestCase
     public function testBuildAuthXmlIncludesCdataUrl(): void
     {
         $url = 'https://app.example.it/login.php?foo=bar&cohesionCheck=1';
-        $xml = $this->call(new Cohesion2(), 'buildAuthXml', $url);
-        self::assertStringContainsString('<![CDATA[' . $url . ']]>', $xml);
+        self::assertStringContainsString('<![CDATA[' . $url . ']]>', $this->buildXml(new Cohesion2(), $url));
     }
 
     public function testBuildAuthXmlIncludesSiteId(): void
     {
         $c = new Cohesion2('cohesion2', null, null, 'PORTALE_X');
-        $xml = $this->call($c, 'buildAuthXml', 'https://app.example.it/?cohesionCheck=1');
-        self::assertMatchesRegularExpression('|<id_sito>PORTALE_X</id_sito>|', $xml);
+        self::assertMatchesRegularExpression(
+            '|<id_sito>PORTALE_X</id_sito>|',
+            $this->buildXml($c, 'https://app.example.it/?cohesionCheck=1')
+        );
     }
 
     public function testBuildAuthXmlIncludesEidasFlag(): void
     {
         $c = new Cohesion2();
         $c->enableEIDASLogin();
-        $xml = $this->call($c, 'buildAuthXml', 'https://app.example.it/?cohesionCheck=1');
-        self::assertStringContainsString('eidas=1', $xml);
+        self::assertStringContainsString(
+            'eidas=1',
+            $this->buildXml($c, 'https://app.example.it/?cohesionCheck=1')
+        );
     }
 
     public function testBuildAuthXmlIncludesPurposeFlag(): void
     {
         $c = new Cohesion2();
         $c->enableSPIDProLogin(['PF', 'PG']);
-        $xml = $this->call($c, 'buildAuthXml', 'https://app.example.it/?cohesionCheck=1');
-        self::assertStringContainsString('purpose=PF|PG', $xml);
+        self::assertStringContainsString(
+            'purpose=PF|PG',
+            $this->buildXml($c, 'https://app.example.it/?cohesionCheck=1')
+        );
     }
 
     /**
@@ -318,7 +323,7 @@ final class Cohesion2Test extends TestCase
     {
         $c = new Cohesion2();
         $c->setAuthRestriction(']]><evil>injected</evil><dummy>');
-        $xml = $this->call($c, 'buildAuthXml', 'https://app.example.it/?cohesionCheck=1');
+        $xml = $this->buildXml($c, 'https://app.example.it/?cohesionCheck=1');
         self::assertStringNotContainsString('<evil>',     $xml);
         self::assertStringNotContainsString('<dummy>',    $xml);
         self::assertStringContainsString(  '&lt;evil&gt;', $xml);
@@ -350,5 +355,16 @@ final class Cohesion2Test extends TestCase
     {
         $ref = new \ReflectionProperty($instance, $property);
         return $ref->getValue($instance);
+    }
+
+    /**
+     * Helper tipato per buildAuthXml: PHPStan non può inferire il return
+     * type di Reflection ma noi sappiamo che il metodo ritorna string.
+     */
+    private function buildXml(Cohesion2 $instance, string $url): string
+    {
+        $r = $this->call($instance, 'buildAuthXml', $url);
+        self::assertIsString($r);
+        return $r;
     }
 }

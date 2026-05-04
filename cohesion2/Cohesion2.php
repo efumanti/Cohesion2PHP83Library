@@ -47,7 +47,10 @@ class Cohesion2
     /** Username utente autenticato in Cohesion */
     public ?string $username = null;
 
-    /** Profilo dell'utente con i dati forniti dal server */
+    /**
+     * Profilo dell'utente con i dati forniti dal server.
+     * @var array<string, string>|null
+     */
     public ?array $profile = null;
 
     /**
@@ -89,15 +92,37 @@ class Cohesion2
         if ($this->isAuth()) {
             $data = $_SESSION[$this->session_name];
             if (is_array($data)) {
-                $this->id_sso    = $data['id_sso']    ?? null;
-                $this->id_aspnet = $data['id_aspnet'] ?? null;
-                $this->username  = $data['username']  ?? null;
-                $this->profile   = $data['profile']   ?? null;
+                $idSso    = $data['id_sso']    ?? null;
+                $idAspnet = $data['id_aspnet'] ?? null;
+                $username = $data['username']  ?? null;
+                $profile  = $data['profile']   ?? null;
+                $this->id_sso    = is_string($idSso)    ? $idSso    : null;
+                $this->id_aspnet = is_string($idAspnet) ? $idAspnet : null;
+                $this->username  = is_string($username) ? $username : null;
+                $this->profile   = is_array($profile)   ? $this->coerceProfile($profile) : null;
             } else {
                 // Formato di sessione precedente la 4.0.0: scartato.
                 unset($_SESSION[$this->session_name]);
             }
         }
+    }
+
+    /**
+     * Costruisce un array<string,string> tollerando voci spurie nella
+     * sessione persistita: chiavi e valori non stringa vengono scartati.
+     *
+     * @param  array<int|string, mixed> $raw
+     * @return array<string, string>
+     */
+    private function coerceProfile(array $raw): array
+    {
+        $out = [];
+        foreach ($raw as $k => $v) {
+            if (is_string($k) && is_string($v)) {
+                $out[$k] = $v;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -286,10 +311,24 @@ class Cohesion2
      * callback URL viene marcata `http://`, esponendo il token di
      * autenticazione in chiaro nel redirect.
      */
+    /** Lettura type-safe di una server var stringa (le superglobali sono mixed). */
+    private function serverString(string $key): string
+    {
+        $v = $_SERVER[$key] ?? '';
+        return is_string($v) ? $v : '';
+    }
+
+    /** Lettura type-safe di una server var numerica. */
+    private function serverInt(string $key): int
+    {
+        $v = $_SERVER[$key] ?? 0;
+        return is_int($v) ? $v : (is_string($v) && is_numeric($v) ? (int) $v : 0);
+    }
+
     private function resolveProtocol(): string
     {
         if ($this->trustProxy) {
-            $forwarded = (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '');
+            $forwarded = $this->serverString('HTTP_X_FORWARDED_PROTO');
             if ($forwarded !== '') {
                 $first = trim(explode(',', $forwarded)[0]);
                 if (strcasecmp($first, 'https') === 0) {
@@ -301,17 +340,17 @@ class Cohesion2
             }
         }
 
-        $https = (string) ($_SERVER['HTTPS'] ?? '');
+        $https = $this->serverString('HTTPS');
         if ($https !== '' && strcasecmp($https, 'off') !== 0) {
             return 'https://';
         }
 
-        return ((int) ($_SERVER['SERVER_PORT'] ?? 0)) === 443 ? 'https://' : 'http://';
+        return $this->serverInt('SERVER_PORT') === 443 ? 'https://' : 'http://';
     }
 
     private function resolveCallbackHost(): string
     {
-        $httpHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
+        $httpHost = $this->serverString('HTTP_HOST');
 
         if ($this->allowedHosts !== []) {
             if ($httpHost !== '') {
@@ -327,7 +366,7 @@ class Cohesion2
             ));
         }
 
-        $serverName = (string) ($_SERVER['SERVER_NAME'] ?? '');
+        $serverName = $this->serverString('SERVER_NAME');
         return $serverName !== '' ? $serverName : $httpHost;
     }
 
@@ -412,8 +451,8 @@ class Cohesion2
     {
         $protocol = $this->resolveProtocol();
         $host = $this->resolveCallbackHost();
-        $urlPagina = $protocol . $host . $_SERVER['REQUEST_URI'];
-        $urlPagina .= ($_SERVER['QUERY_STRING']) ? '&' : '?';
+        $urlPagina = $protocol . $host . $this->serverString('REQUEST_URI');
+        $urlPagina .= $this->serverString('QUERY_STRING') !== '' ? '&' : '?';
         $urlPagina .= 'cohesionCheck=1';
         $xmlAuth = $this->buildAuthXml($urlPagina);
         $auth = urlencode(base64_encode($xmlAuth));
@@ -541,11 +580,15 @@ class Cohesion2
         $result = $this->httpPost($url, $data);
         $domXML->loadXML($result, $xmlOptions);
         $profilo = simplexml_import_dom($domXML);
-        $base = current($profilo->xpath('//base'));
-        if (is_object($base) && $base->login) {
+        if (!$profilo instanceof \SimpleXMLElement) {
+            throw new Cohesion2Exception('Risposta Cohesion2 non parsabile come SimpleXML');
+        }
+        $xpathResult = $profilo->xpath('//base');
+        $base = (is_array($xpathResult) && $xpathResult !== []) ? $xpathResult[0] : null;
+        if ($base instanceof \SimpleXMLElement && $base->login) {
             $resp = [];
-            foreach ($base->children() as $node) {
-                $resp[$node->getName()] = (string) $node;
+            foreach ($base->children() ?? [] as $node) {
+                $resp[(string) $node->getName()] = (string) $node;
             }
             $this->profile = $resp;
             // Rigenerazione dell'id di sessione: passaggio a livello di privilegio
