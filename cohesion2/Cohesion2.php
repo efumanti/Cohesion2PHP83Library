@@ -55,11 +55,16 @@ class Cohesion2
             session_start();
         }
         if ($this->isAuth()) {
-            $obj = unserialize($_SESSION[$this->session_name]);
-            $this->id_sso = $obj->id_sso;
-            $this->id_aspnet = $obj->id_aspnet;
-            $this->username = $obj->username;
-            $this->profile = $obj->profile;
+            $data = $_SESSION[$this->session_name];
+            if (is_array($data)) {
+                $this->id_sso    = $data['id_sso']    ?? null;
+                $this->id_aspnet = $data['id_aspnet'] ?? null;
+                $this->username  = $data['username']  ?? null;
+                $this->profile   = $data['profile']   ?? null;
+            } else {
+                // Formato di sessione precedente la 4.0.0: scartato.
+                unset($_SESSION[$this->session_name]);
+            }
         }
     }
 
@@ -240,7 +245,12 @@ class Cohesion2
                 $resp[$node->getName()] = (string) $node;
             }
             $this->profile = $resp;
-            $_SESSION[$this->session_name] = serialize($this);
+            $_SESSION[$this->session_name] = [
+                'id_sso'    => $this->id_sso,
+                'id_aspnet' => $this->id_aspnet,
+                'username'  => $this->username,
+                'profile'   => $this->profile,
+            ];
         } else {
             throw new Cohesion2Exception('Profilo utente non trovato nella risposta fornita da Cohesion2');
         }
