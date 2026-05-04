@@ -339,8 +339,13 @@ class Cohesion2
     public function auth(): void
     {
         if (!$this->isAuth()) {
-            if (!empty($_REQUEST['auth']) && is_string($_REQUEST['auth'])) {
-                $this->verify($_REQUEST['auth']);
+            // Cohesion2 redirige sempre via GET. $_GET evita che un cookie
+            // chiamato "auth" venga letto come parametro di richiesta
+            // attraverso $_REQUEST quando ini "request_order" include "C"
+            // (CWE-565: Reliance on Cookies without Validation).
+            $auth = $_GET['auth'] ?? null;
+            if (is_string($auth) && $auth !== '') {
+                $this->verify($auth);
             } else {
                 $this->check();
             }
