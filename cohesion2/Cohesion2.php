@@ -384,15 +384,27 @@ class Cohesion2
      */
     private function verify(string $auth): void
     {
+        // LIBXML_NONET disabilita il fetching di DTD/entità esterne dal parser
+        // libxml: previene XXE (CWE-611) anche su versioni in cui la
+        // disabilitazione di default non sia garantita. NON usare
+        // LIBXML_NOENT, che invece *abilita* la sostituzione delle entità.
+        $xmlOptions = LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING;
+
         $xml = trim(base64_decode($auth));
         $domXML = new \DOMDocument();
-        $domXML->loadXML($xml);
+        $domXML->loadXML($xml, $xmlOptions);
         $this->id_sso    = $domXML->getElementsByTagName('id_sessione_sso')->item(0)?->nodeValue;
         $this->id_aspnet = $domXML->getElementsByTagName('id_sessione_aspnet_sso')->item(0)?->nodeValue;
         $this->username  = $domXML->getElementsByTagName('user')->item(0)?->nodeValue;
         $esito           = $domXML->getElementsByTagName('esito_auth_sso')->item(0)?->nodeValue;
         if ($esito !== 'OK' || $this->id_sso === null || $this->id_sso === '' || $this->id_aspnet === null || $this->id_aspnet === '') {
-            throw new Cohesion2Exception("Errore in fase di autenticazione ($esito,$this->id_sso,$this->id_aspnet)");
+            // Il messaggio non include id_sso/id_aspnet: sono token di
+            // sessione e gli error log applicativi spesso vengono raccolti
+            // in sistemi centralizzati con visibilità ampia.
+            throw new Cohesion2Exception(sprintf(
+                'Errore in fase di autenticazione: esito=%s',
+                $esito ?? '(assente)'
+            ));
         }
 
         $url = $this->saml20 ? self::COHESION2_SAML20_WEB : self::COHESION2_WEB;
@@ -402,7 +414,7 @@ class Cohesion2
             'IdSessioneASPNET' => $this->id_aspnet,
         ];
         $result = $this->httpPost($url, $data);
-        $domXML->loadXML($result);
+        $domXML->loadXML($result, $xmlOptions);
         $profilo = simplexml_import_dom($domXML);
         $base = current($profilo->xpath('//base'));
         if (is_object($base) && $base->login) {
