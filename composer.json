@@ -1,19 +1,25 @@
 {
-    "name": "andreaval/cohesion2-library",
-    "description": "Libreria PHP per l'autenticazione al sistema di SSO Cohesion2 della Regione Marche",
+    "name": "efumanti/cohesion2-library",
+    "description": "Libreria PHP per l'autenticazione al sistema di SSO Cohesion2 della Regione Marche. Fork modernizzato per PHP 8.3+.",
     "type": "library",
     "keywords": ["php", "Cohesion2", "Regione Marche", "SSO", "Single Sign-On", "SAML 2.0", "SPID", "eIDAS"],
-    "homepage": "https://github.com/andreaval/Cohesion2PHPLibrary",
+    "homepage": "https://github.com/efumanti/Cohesion2PHP83Library",
     "license": "MIT",
     "authors": [
         {
             "name": "Andrea Vallorani",
-            "email": "andrea.vallorani@gmail.com"
+            "email": "andrea.vallorani@gmail.com",
+            "role": "Original author"
+        },
+        {
+            "name": "Enrico Fumanti",
+            "email": "efumanti@schema31.it",
+            "role": "Maintainer del fork"
         }
     ],
     "support": {
-        "issues": "https://github.com/andreaval/Cohesion2PHPLibrary/issues",
-        "source": "https://github.com/andreaval/Cohesion2PHPLibrary"
+        "issues": "https://github.com/efumanti/Cohesion2PHP83Library/issues",
+        "source": "https://github.com/efumanti/Cohesion2PHP83Library"
     },
     "require": {
         "php": "^8.3",

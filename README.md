@@ -1,6 +1,17 @@
 # Cohesion2 libreria PHP
-Libreria per l'autenticazione al sistema di SSO Cohesion2 della Regione Marche. 
-Questa libreria  permette di integrare il  Single Sign-On di Cohesion2 in siti o applicativi web sviluppati in linguaggio PHP. 
+
+> **Fork modernizzato per PHP 8.3+** del progetto originale
+> [`andreaval/Cohesion2PHPLibrary`](https://github.com/andreaval/Cohesion2PHPLibrary)
+> di Andrea Vallorani. Mantiene la stessa API pubblica della 3.x, alza il
+> requisito minimo a PHP 8.3, riscrive le chiamate HTTPS con cURL (TLS
+> verificato), corregge una serie di problemi di sicurezza (open redirect,
+> XML injection, session fixation, XXE, …) e introduce una suite PHPUnit
+> con analisi statica PHPStan a livello max. Vedi la sezione "Storia del
+> progetto" in fondo per il dettaglio.
+
+Libreria per l'autenticazione al sistema di SSO Cohesion2 della Regione Marche.
+Questa libreria permette di integrare il Single Sign-On di Cohesion2 in siti o
+applicativi web sviluppati in linguaggio PHP.
 
 ## Requisiti di installazione
 * PHP 8.3 o superiore
@@ -8,10 +19,16 @@ Questa libreria  permette di integrare il  Single Sign-On di Cohesion2 in siti o
 * Estensioni PHP `dom`, `libxml`, `simplexml` (di norma incluse nel pacchetto standard)
 
 ## Installazione
-Usando il package manager [composer](https://getcomposer.org/) installare il pacchetto *andreaval/cohesion2-library*
-oppure
-**manualmente** copiando la directory cohesion2 in un qualsiasi punto della cartella web dell’applicativo. Assicurarsi che la cartella contenga il seguente file:
--	Cohesion2.php
+Tramite [Composer](https://getcomposer.org/):
+
+```bash
+composer require efumanti/cohesion2-library
+```
+
+oppure **manualmente** copiando la directory `cohesion2/` in un qualsiasi punto
+della cartella web dell'applicativo. Assicurarsi che la cartella contenga i file:
+- `Cohesion2.php`
+- `Cohesion2Exception.php`
 
 ## Abilitazione SSO
 Il Single Sign-On è abilitato per default nella libreria. Questo significa che prima di reindirizzare l’utente alla maschera di login, il sistema verifica la validità della sessione ed evita quindi all’utente di doversi riautenticare.
