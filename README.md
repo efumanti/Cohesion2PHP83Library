@@ -238,3 +238,99 @@ Libreria creata come lavoro personale da Andrea Vallorani (andrea.vallorani@gmai
     - requisito minimo PHP 8.3, autoload PSR-4, dichiarazioni `strict_types` e tipizzazione completa di proprietà e metodi
     - chiamate HTTPS riscritte con cURL e verifica TLS attiva di default (rimossa la dipendenza da `allow_url_fopen`)
     - sessione salvata come array invece di oggetto serializzato (elimina il rischio di PHP Object Injection); le sessioni 3.x non sono compatibili
+
+## Errori comuni
+
+**`Session has already been started by session.auto-start or session_start()`**
+
+Verificare che nel codice non ci siano chiamate alla funzione `session_start()`
+*dopo* l'istanziazione della classe `Cohesion2`: il costruttore avvia la
+sessione automaticamente se non è ancora attiva.
+
+**`ERRORE: il server XXX non è abilitato all'utilizzo di COHESION`**
+
+Il server applicativo non è registrato lato Cohesion2. Due strade:
+- richiedere al referente Cohesion2 della Regione Marche l'abilitazione
+  dell'IP di produzione;
+- in fase di sviluppo, disabilitare temporaneamente il Single Sign-On con
+  `$cohesion->useSSO(false);` (l'utente verrà sempre rediretto alla pagina
+  di login senza il check preventivo della sessione SSO).
+
+## Appendice — esempi di XML scambiati con Cohesion2
+
+Riferimento per chi debugga il flusso. Il payload effettivamente inviato
+viene costruito da `Cohesion2::buildAuthXml()` e codificato in base64 +
+urlencode prima di essere passato in querystring.
+
+### Richiesta inviata alla maschera di login
+
+```xml
+<dsAuth xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://tempuri.org/Auth.xsd">
+    <auth>
+        <user/>
+        <id_sa/>
+        <id_sito>TEST</id_sito>
+        <esito_auth_sa/>
+        <id_sessione_sa/>
+        <id_sessione_aspnet_sa/>
+        <url_validate><![CDATA[https://app.example.it/login.php?cohesionCheck=1]]></url_validate>
+        <url_richiesta><![CDATA[https://app.example.it/login.php?cohesionCheck=1]]></url_richiesta>
+        <esito_auth_sso/>
+        <id_sessione_sso/>
+        <id_sessione_aspnet_sso/>
+        <stilesheet>AuthRestriction=0,1,2,3</stilesheet>
+        <AuthRestriction xmlns="">0,1,2,3</AuthRestriction>
+    </auth>
+</dsAuth>
+```
+
+### Risposta ricevuta dalla maschera di login
+
+```xml
+<dsAuth xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://tempuri.org/Auth.xsd">
+    <auth>
+        <user>nome.cognome</user>
+        <id_sa>1</id_sa>
+        <id_sito>TEST</id_sito>
+        <esito_auth_sa>OK</esito_auth_sa>
+        <id_sessione_sa>B0C0E8C2C6ECACB4D096FA8C14D37B25...</id_sessione_sa>
+        <id_sessione_aspnet_sa>1h5h2f3r0nfeoazu3seeue4f</id_sessione_aspnet_sa>
+        <url_validate>https://app.example.it/login.php?cohesionCheck=1</url_validate>
+        <url_richiesta>https://app.example.it/login.php?cohesionCheck=1</url_richiesta>
+        <esito_auth_sso>OK</esito_auth_sso>
+        <id_sessione_sso>179422C462F5C75194F9D0863025EC34...</id_sessione_sso>
+        <id_sessione_aspnet_sso>1h5h2f3r0nfeoazu3seeue4f</id_sessione_aspnet_sso>
+        <stilesheet/>
+        <tipoAutenticazione xmlns="">Password</tipoAutenticazione>
+        <ip xmlns="">cohesion2.regione.marche.it</ip>
+    </auth>
+</dsAuth>
+```
+
+### Risposta del metodo `GetCredential` (profilo utente)
+
+```xml
+<profile timestamp="Thu, 12 Jun 2014 11:30:42 GMT" xmlns="">
+    <base>
+        <titolo/>
+        <nome>ANDREA</nome>
+        <cognome>VALLORANI</cognome>
+        <sesso>M</sesso>
+        <login>vallorani</login>
+        <codice_fiscale>XXXXXXXXXXXX</codice_fiscale>
+        <telefono>XXXXX</telefono>
+        <localita_nascita>FERMO</localita_nascita>
+        <provincia_nascita>XX</provincia_nascita>
+        <data_nascita>00/00/0000</data_nascita>
+        <email>andrea.vallorani@gmail.com</email>
+        <email_certificata/>
+        <indirizzo_residenza>VIA XXXX</indirizzo_residenza>
+        <localita_residenza>XXXXXX</localita_residenza>
+        <provincia_residenza>XX</provincia_residenza>
+        <cap_residenza>00000</cap_residenza>
+        <tipo_autenticazione>PW</tipo_autenticazione>
+    </base>
+</profile>
+```
