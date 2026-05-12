@@ -255,6 +255,8 @@ Libreria creata come lavoro personale da Andrea Vallorani (andrea.vallorani@gmai
     - requisito minimo PHP 8.3, autoload PSR-4, dichiarazioni `strict_types` e tipizzazione completa di proprietà e metodi
     - chiamate HTTPS riscritte con cURL e verifica TLS attiva di default (rimossa la dipendenza da `allow_url_fopen`)
     - sessione salvata come array invece di oggetto serializzato (elimina il rischio di PHP Object Injection); le sessioni 3.x non sono compatibili
+- 2026-05-05 ver. 4.0.1 — release patch documentale: integrazione di `cohesion2/README.doc` nel README.md e rimozione del binario duplicato; nessuna modifica al codice
+- 2026-05-12 ver. 4.0.2 — fix del binding SAML 2.0 HTTP-POST in `auth()`: il payload `auth` viene ora letto anche da `$_POST` (con precedenza a `$_GET`), risolvendo il loop di redirect sulla callback osservato con SPID/CIE attraverso il WAYF di Regione Marche. La lettura è esplicita su `$_GET`/`$_POST`, mai su `$_REQUEST` (CWE-565)
 
 ## Errori comuni
 

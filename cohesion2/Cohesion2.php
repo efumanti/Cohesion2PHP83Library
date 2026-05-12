@@ -10,7 +10,7 @@ if (!class_exists(__NAMESPACE__ . '\\Cohesion2Exception')) {
 /**
  * Classe per la gestione del SSO di Cohesion2.
  *
- * @version 4.0.0 04/05/2026
+ * @version 4.0.2 12/05/2026
  * @requires PHP 8.3
  * @author Andrea Vallorani <andrea.vallorani@gmail.com>
  * @license MIT License <https://github.com/andreaval/Cohesion2PHPLibrary/blob/master/LICENSE>
@@ -378,17 +378,48 @@ class Cohesion2
     public function auth(): void
     {
         if (!$this->isAuth()) {
-            // Cohesion2 redirige sempre via GET. $_GET evita che un cookie
-            // chiamato "auth" venga letto come parametro di richiesta
-            // attraverso $_REQUEST quando ini "request_order" include "C"
-            // (CWE-565: Reliance on Cookies without Validation).
-            $auth = $_GET['auth'] ?? null;
-            if (is_string($auth) && $auth !== '') {
+            $auth = $this->readAuthPayload();
+            if ($auth !== null) {
                 $this->verify($auth);
             } else {
                 $this->check();
             }
         }
+    }
+
+    /**
+     * Recupera il payload `auth` restituito da Cohesion2 al termine
+     * dell'autenticazione.
+     *
+     * Cohesion2 supporta due binding di risposta:
+     *   - legacy SSO: GET con `auth` in query string;
+     *   - SAML 2.0 HTTP-POST binding (cfr. SAML 2.0 Bindings §3.5):
+     *     l'IdP serve un HTML auto-submit `<form method="POST">` che POSTa
+     *     `auth` come campo del form. È il binding usato di default da SPID
+     *     e CIE attraverso il WAYF di Regione Marche; senza la lettura da
+     *     $_POST si innescava un loop di redirect sulla callback.
+     *
+     * Precedenza GET → POST: se entrambi sono popolati prevale $_GET, per
+     * preservare il comportamento storico della libreria.
+     *
+     * Si leggono $_GET e $_POST esplicitamente (non $_REQUEST): $_REQUEST
+     * può includere $_COOKIE in funzione di `ini request_order` e un cookie
+     * di nome "auth" controllato dal client potrebbe essere accettato come
+     * input di autenticazione (CWE-565: Reliance on Cookies without
+     * Validation). $_POST è alimentato esclusivamente dal corpo della
+     * richiesta e quindi non rientra in quello scenario.
+     */
+    private function readAuthPayload(): ?string
+    {
+        $get = $_GET['auth'] ?? null;
+        if (is_string($get) && $get !== '') {
+            return $get;
+        }
+        $post = $_POST['auth'] ?? null;
+        if (is_string($post) && $post !== '') {
+            return $post;
+        }
+        return null;
     }
 
     /**

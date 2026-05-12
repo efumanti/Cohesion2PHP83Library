@@ -49,6 +49,8 @@ final class Cohesion2Test extends TestCase
             unset($_SERVER[$k]);
         }
         $_GET = [];
+        $_POST = [];
+        $_COOKIE = [];
         $_SESSION = [];
     }
 
@@ -339,6 +341,77 @@ final class Cohesion2Test extends TestCase
         $this->expectException(Cohesion2Exception::class);
         $this->expectExceptionMessageMatches('/CDATA/');
         $this->call(new Cohesion2(), 'buildAuthXml', 'https://app.example.it/path]]><evil/>');
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // auth() / readAuthPayload()
+    // ────────────────────────────────────────────────────────────────────
+
+    /**
+     * Costruisce un payload `auth` (base64 di XML) con `esito_auth_sso`
+     * impostabile. Usato dai test su auth() per pilotare verify() lungo
+     * un percorso deterministico (esito=KO ⇒ eccezione) senza che la
+     * libreria contatti il backend Cohesion2 via cURL.
+     */
+    private function authPayload(string $esito): string
+    {
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<dsAuth xmlns="http://tempuri.org/Auth.xsd"><auth>'
+            . '<esito_auth_sso>' . $esito . '</esito_auth_sso>'
+            . '</auth></dsAuth>';
+        return base64_encode($xml);
+    }
+
+    public function testAuthReadsPayloadFromGet(): void
+    {
+        $_GET['auth'] = $this->authPayload('KO');
+
+        $this->expectException(Cohesion2Exception::class);
+        $this->expectExceptionMessageMatches('/esito=KO/');
+        (new Cohesion2())->auth();
+    }
+
+    /**
+     * Regressione del loop di redirect col binding SAML 2.0 HTTP-POST:
+     * l'IdP POSTa il SAMLResponse alla callback tramite form auto-submit,
+     * quindi `auth` arriva in $_POST e non in $_GET (SAML 2.0 Bindings §3.5).
+     */
+    public function testAuthReadsPayloadFromPostWhenGetMissing(): void
+    {
+        $_POST['auth'] = $this->authPayload('KO');
+
+        $this->expectException(Cohesion2Exception::class);
+        $this->expectExceptionMessageMatches('/esito=KO/');
+        (new Cohesion2())->auth();
+    }
+
+    /**
+     * Precedenza esplicita GET → POST: se la libreria leggesse $_POST,
+     * verify() decodificherebbe la stringa non-base64 e produrrebbe un
+     * messaggio differente (esito assente). L'attesa "esito=KO" conferma
+     * che il payload effettivamente verificato proviene da $_GET.
+     */
+    public function testAuthPrefersGetOverPost(): void
+    {
+        $_GET['auth']  = $this->authPayload('KO');
+        $_POST['auth'] = 'non-base64-payload';
+
+        $this->expectException(Cohesion2Exception::class);
+        $this->expectExceptionMessageMatches('/esito=KO/');
+        (new Cohesion2())->auth();
+    }
+
+    /**
+     * CWE-565: un cookie controllato dal client di nome "auth" non deve
+     * mai diventare input di autenticazione. La lettura esplicita di
+     * $_GET + $_POST (invece di $_REQUEST) garantisce che $_COOKIE sia
+     * ignorato anche se `ini request_order` include "C".
+     */
+    public function testReadAuthPayloadIgnoresCookieAuthVariable(): void
+    {
+        $_COOKIE['auth'] = $this->authPayload('OK');
+
+        self::assertNull($this->call(new Cohesion2(), 'readAuthPayload'));
     }
 
     // ────────────────────────────────────────────────────────────────────
